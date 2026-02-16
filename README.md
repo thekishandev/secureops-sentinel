@@ -40,29 +40,188 @@ Layer 5: Playbook-Only    → Remediator executes pre-approved actions only
 
 ---
 
-## 🚀 Quick Start
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/thekishandev/secureops-sentinel.git && cd secureops-sentinel
-
-# 2. Add your API keys
-cp .env.example .env
-# Edit .env with your OpenAI, GitHub, and Slack credentials
-
-# 3. Launch everything
-docker-compose up
-
-# 4. Open Archestra
-# Chat UI: http://localhost:3000
-# Grafana:  http://localhost:3001 (admin/admin)
-```
+## 🚀 Setup Guide
 
 ### Prerequisites
-- Docker & Docker Compose
-- OpenAI API key (GPT-4o)
-- GitHub Personal Access Token
-- Slack Bot Token
+
+| Requirement | Why |
+|-------------|-----|
+| **Docker** (v24+) with Docker Compose | Runs the entire stack |
+| **8 GB RAM** minimum | Archestra + embedded K8s cluster |
+| **OpenAI API key** | Primary LLM (GPT-4o) |
+| **GitHub PAT** | For GitHub MCP server — [create one here](https://github.com/settings/tokens) with scopes: `repo`, `read:org`, `write:issues` |
+| **Slack Bot Token** | For Slack MCP server — [create a Slack app](https://api.slack.com/apps) with scopes: `chat:write`, `channels:read` |
+| **Anthropic API key** *(optional)* | Fallback LLM + Claude Haiku for cost optimization |
+
+---
+
+### Step 1: Clone & Configure Environment
+
+```bash
+# Clone the repo
+git clone https://github.com/thekishandev/secureops-sentinel.git
+cd secureops-sentinel
+
+# Create your .env file from the template
+cp .env.example .env
+```
+
+Edit `.env` and fill in your real API keys:
+
+```bash
+OPENAI_API_KEY=sk-your-real-key-here
+ANTHROPIC_API_KEY=sk-ant-your-real-key-here     # Optional
+GITHUB_PAT=ghp_your-real-token-here
+SLACK_BOT_TOKEN=xoxb-your-real-token-here
+```
+
+---
+
+### Step 2: Launch the Stack
+
+```bash
+docker compose up -d
+```
+
+> ⏳ **First launch takes 3–5 minutes** — Archestra creates an internal Kubernetes cluster (KinD) for MCP server orchestration.
+
+Monitor startup progress:
+```bash
+docker logs -f secureops-archestra
+# Wait for: "Archestra Platform API started on port 9000"
+```
+
+Verify all services are running:
+
+| Service | URL | Expected |
+|---------|-----|----------|
+| Archestra Chat UI | http://localhost:3000 | Login page |
+| Archestra API | http://localhost:9000 | API server |
+| Prometheus Metrics | http://localhost:9050/metrics | Metrics text |
+| Grafana Dashboard | http://localhost:3001 | Login page |
+
+---
+
+### Step 3: Login to Archestra
+
+1. Open **http://localhost:3000**
+2. Login with default credentials:
+   - **Email:** `admin@example.com`
+   - **Password:** `password`
+
+---
+
+### Step 4: Add LLM API Keys
+
+1. Go to **Settings** → **LLM Providers**
+2. Enable **OpenAI** → paste your `OPENAI_API_KEY` → test connection
+3. *(Optional)* Enable **Anthropic** → paste your `ANTHROPIC_API_KEY`
+
+---
+
+### Step 5: Register the Custom MCP Server
+
+Build the MCP server first:
+```bash
+cd log-source-mcp
+npm install && npm run build
+cd ..
+```
+
+Then register in Archestra:
+1. Go to **Settings** → **MCP Servers** → **Add Server**
+2. Configure:
+   - **Name:** `log-source-mcp`
+   - **Transport:** `stdio`
+   - **Command:** `node`
+   - **Args:** `/absolute/path/to/secureops-sentinel/log-source-mcp/dist/index.js`
+3. Click **Save & Start**
+4. ✅ Verify: status shows **Running**, tools tab shows `get_recent_logs` and `get_service_list`
+
+---
+
+### Step 6: Install GitHub & Slack MCP Servers
+
+1. Go to **Settings** → **MCP Registry** → **Public Registry**
+2. Search **GitHub MCP** → **Install** → add your `GITHUB_PAT`
+3. Search **Slack MCP** → **Install** → add your `SLACK_BOT_TOKEN`
+4. ✅ Verify: both show "Installed" on MCP Servers page
+
+---
+
+### Step 7: Create the 3 Agents
+
+Create each agent in **Agents** → **Create Agent**:
+
+#### Agent 1: LogAnalyzerAgent
+- **System Prompt:** Copy from [`configs/prompts/log-analyzer.system-prompt.md`](configs/prompts/log-analyzer.system-prompt.md)
+- **LLM:** GPT-4o
+- **Tools:** `log-source-mcp:get_recent_logs`, `log-source-mcp:get_service_list`
+- **Sub-Agents:** `IncidentCommanderAgent`
+
+#### Agent 2: IncidentCommanderAgent
+- **System Prompt:** Copy from [`configs/prompts/incident-commander.system-prompt.md`](configs/prompts/incident-commander.system-prompt.md)
+- **LLM:** GPT-4o
+- **Tools:** `github-mcp:create_issue`, `slack-mcp:post_message`
+- **Sub-Agents:** `RemediationAgent`
+
+#### Agent 3: RemediationAgent
+- **System Prompt:** Copy from [`configs/prompts/remediation.system-prompt.md`](configs/prompts/remediation.system-prompt.md)
+- **LLM:** Claude Haiku *(cost-optimized)*
+- **Tools:** `github-mcp:create_pull_request`
+
+---
+
+### Step 8: Apply Security Policies
+
+#### Dual LLM (blocks prompt injection)
+1. **Settings** → **Security** → **Dual LLM**
+2. Enable → set **Max Rounds:** `5` → **Quarantine Model:** `Claude Haiku`
+3. Apply to tool: `log-source-mcp:get_recent_logs`
+4. See [`configs/policies/dual-llm-config.md`](configs/policies/dual-llm-config.md) for full config
+
+#### Dynamic Tools (blocks data exfiltration)
+1. **Settings** → **Tools** → **Tool Result Policies**
+2. Mark `log-source-mcp:get_recent_logs` as **Untrusted**
+3. Add rule: after untrusted data → block `github-mcp:*` and `slack-mcp:*`
+4. See [`configs/policies/dynamic-tools-policy.md`](configs/policies/dynamic-tools-policy.md) for full config
+
+#### Cost Limits
+1. **Settings** → **Usage** → **Cost Limits** → daily budget: `$5.00`
+2. See [`configs/policies/cost-limits.md`](configs/policies/cost-limits.md) for optimization rules
+
+---
+
+### Step 9: Verify — Run a Test
+
+Open **Chat UI** → select **LogAnalyzerAgent** → type:
+
+```
+Check the web-api service logs and report any issues.
+```
+
+**Expected behavior:**
+1. ✅ Agent fetches logs (including poisoned injection payload)
+2. 🛡️ Dual LLM quarantine activates — injection stripped
+3. 🛡️ Dynamic Tools blocks any external tool call in tainted context
+4. ✅ Sanitized summary passed to IncidentCommanderAgent via A2A
+5. ✅ GitHub issue created + Slack alert posted
+
+**Verify in Grafana** (http://localhost:3001, login `admin`/`admin`):
+- `llm_blocked_tools_total` > 0 → proves security is working
+- `mcp_tool_calls_total` shows traffic to all 3 MCP servers
+
+---
+
+### 🆘 Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Port 3000 already in use | `docker stop $(docker ps -q --filter "publish=3000")` then retry |
+| Archestra shows "unhealthy" | Wait 3-5 min for KinD cluster init. Check: `docker logs secureops-archestra` |
+| Grafana shows "No Data" | Verify datasource URL is `http://archestra:9050` (not `localhost`) |
+| MCP server won't start | Rebuild: `cd log-source-mcp && npm run build` and verify path |
+| "Tool blocked" not appearing | Check Dynamic Tools config: `get_recent_logs` must be marked **Untrusted** |
 
 ---
 
