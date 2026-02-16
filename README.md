@@ -14,7 +14,6 @@
 SecureOps Sentinel is a multi-agent system that triages production incidents using AI — while defending against prompt injection attacks hiding in log data. Built on the [Archestra](https://archestra.ai) platform, it demonstrates that AI agents can safely process untrusted data without sacrificing their ability to take automated actions.
 
 </div>
----
 
 ## 🎯 What It Does
 
