@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # 'archestra' is the service name in docker-compose
+    url: http://archestra:9050
+    isDefault: true
+    editable: false

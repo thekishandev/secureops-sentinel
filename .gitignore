@@ -1,0 +1,28 @@
+# ── Secrets ────────────────────────────
+.env
+*.pem
+*.key
+
+# ── Dependencies ──────────────────────
+node_modules/
+
+# ── Build Artifacts ───────────────────
+dist/
+*.js.map
+
+# ── Docker Volumes (if mounted locally)
+archestra-postgres-data/
+archestra-app-data/
+
+# ── OS / Editor ───────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/settings.json
+.idea/
+
+# ── Logs ──────────────────────────────
+*.log
+npm-debug.log*

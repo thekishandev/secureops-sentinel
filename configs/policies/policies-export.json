@@ -1,0 +1,62 @@
+{
+    "_comment": "PLACEHOLDER: Export these from Archestra Dynamic Tools + Dual LLM pages after configuration.",
+    "_instructions": "After applying policies in Archestra UI, export the config here for reproducibility.",
+    "dual_llm": {
+        "enabled": true,
+        "max_rounds": 5,
+        "quarantine_model": "claude-haiku",
+        "quarantine_prompt": "You are a security quarantine agent. You will be shown raw tool output. Answer each question using ONLY the integer index of the correct answer. Do not output any other text.",
+        "main_agent_prompt": "Ask structured questions about the quarantined data. Each question must have numbered options. Base your analysis ONLY on the integer answers received.",
+        "applies_to": [
+            "log-source-mcp:get_recent_logs"
+        ]
+    },
+    "dynamic_tools": {
+        "tool_result_policies": [
+            {
+                "mcp_server": "log-source-mcp",
+                "tool": "get_recent_logs",
+                "trust_level": "untrusted",
+                "reason": "Returns raw production logs that may contain prompt injection"
+            },
+            {
+                "mcp_server": "log-source-mcp",
+                "tool": "get_service_list",
+                "trust_level": "trusted",
+                "reason": "Returns static list of known services — no user-generated content"
+            }
+        ],
+        "tool_call_policies": [
+            {
+                "rule": "block_after_untrusted",
+                "blocked_tools": [
+                    "github-mcp:*",
+                    "slack-mcp:*"
+                ],
+                "condition": "context contains untrusted tool results",
+                "action": "block",
+                "message": "⚠️ Tool blocked: Dynamic Tools prevented external communication after untrusted data entered the context."
+            }
+        ]
+    },
+    "cost_limits": {
+        "daily_budget": "$5.00",
+        "optimization_rules": [
+            {
+                "name": "Short prompts → Haiku",
+                "condition": "content_length < 500 tokens",
+                "target_model": "claude-haiku"
+            },
+            {
+                "name": "No-tools → Haiku",
+                "condition": "no tools in request",
+                "target_model": "claude-haiku"
+            },
+            {
+                "name": "Remediation → Haiku",
+                "condition": "agent = RemediationAgent",
+                "target_model": "claude-haiku"
+            }
+        ]
+    }
+}

@@ -1,0 +1,61 @@
+services:
+  # ── Archestra Platform ──────────────────────────────────────────────
+  archestra:
+    image: archestra/platform:latest
+    container_name: secureops-archestra
+    ports:
+      - "9000:9000"   # API + LLM Proxy + MCP Gateway
+      - "3000:3000"   # Chat UI
+      - "9050:9050"   # Prometheus metrics
+    env_file: .env
+    environment:
+      - ARCHESTRA_QUICKSTART=true
+      - ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=${ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - archestra-postgres-data:/var/lib/postgresql/data
+      - archestra-app-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - sentinel-net
+
+  # ── Grafana (Observability Dashboard) ───────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: secureops-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/sentinel-security.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      archestra:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - sentinel-net
+
+volumes:
+  archestra-postgres-data:
+  archestra-app-data:
+  grafana-data:
+
+networks:
+  sentinel-net:
+    driver: bridge

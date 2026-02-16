@@ -1,0 +1,57 @@
+{
+    "_comment": "PLACEHOLDER: Export these from Archestra Agent Builder after creating agents in the UI.",
+    "_instructions": "Go to Agent Builder → each agent → Export → save JSON here.",
+    "agents": [
+        {
+            "name": "LogAnalyzerAgent",
+            "status": "not_created",
+            "system_prompt_file": "../prompts/log-analyzer.system-prompt.md",
+            "tools": [
+                "log-source-mcp:get_recent_logs",
+                "log-source-mcp:get_service_list"
+            ],
+            "llm_profile": "gpt-4o",
+            "sub_agents": [
+                "IncidentCommanderAgent"
+            ],
+            "security": {
+                "dual_llm": true,
+                "dynamic_tools": true,
+                "tool_trust": "untrusted"
+            }
+        },
+        {
+            "name": "IncidentCommanderAgent",
+            "status": "not_created",
+            "system_prompt_file": "../prompts/incident-commander.system-prompt.md",
+            "tools": [
+                "github-mcp:create_issue",
+                "slack-mcp:post_message"
+            ],
+            "llm_profile": "gpt-4o",
+            "sub_agents": [
+                "RemediationAgent"
+            ],
+            "security": {
+                "dual_llm": false,
+                "dynamic_tools": false,
+                "tool_trust": "trusted"
+            }
+        },
+        {
+            "name": "RemediationAgent",
+            "status": "not_created",
+            "system_prompt_file": "../prompts/remediation.system-prompt.md",
+            "tools": [
+                "github-mcp:create_pull_request"
+            ],
+            "llm_profile": "claude-haiku",
+            "sub_agents": [],
+            "security": {
+                "dual_llm": false,
+                "dynamic_tools": false,
+                "tool_trust": "trusted"
+            }
+        }
+    ]
+}
